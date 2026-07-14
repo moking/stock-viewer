@@ -42,6 +42,7 @@ from src.i18n import (  # noqa: E402
     NAV_KEYS,
     PERIOD_KEYS,
     PERIOD_TO_INTERNAL,
+    resolve_period_internal,
     chart_label,
     get_lang,
     init_language,
@@ -630,7 +631,7 @@ def render_ownership_analysis_tab(symbol: str, period_key: str, history: pd.Data
     st.caption(t("ownership_caption"))
 
     with st.spinner(t("loading_ownership")):
-        analysis = fetch_ownership_analysis(symbol, PERIOD_TO_INTERNAL[period_key])
+        analysis = fetch_ownership_analysis(symbol, resolve_period_internal(period_key))
 
     if not analysis["has_data"]:
         st.warning(t("no_ownership_data"))
@@ -803,7 +804,7 @@ def render_trend_analysis_tab(symbol: str, period_key: str, history: pd.DataFram
     st.caption(t("trend_caption"))
 
     with st.spinner(t("loading_trend")):
-        analysis = fetch_trend_analysis(symbol, PERIOD_TO_INTERNAL[period_key], current_price=current_price)
+        analysis = fetch_trend_analysis(symbol, resolve_period_internal(period_key), current_price=current_price)
 
     if not analysis["has_data"]:
         st.warning(t("no_trend_data"))
@@ -1032,6 +1033,11 @@ def render_top_bar(symbol: str = "") -> tuple[str, str, str]:
         width="stretch",
         key="main_nav",
     )
+    if not selected or selected not in nav_labels:
+        nav_idx = NAV_KEYS.index(current_nav) if current_nav in NAV_KEYS else 0
+        selected = nav_labels[nav_idx]
+        st.session_state["main_nav"] = selected
+
     nav_key = NAV_KEYS[nav_labels.index(selected)]
     st.session_state["nav_key"] = nav_key
     st.markdown("---")
@@ -1043,14 +1049,22 @@ def _init_app_state():
         st.session_state["symbol"] = ""
     if "_view_symbol" not in st.session_state:
         st.session_state["_view_symbol"] = st.session_state["symbol"]
-    if "nav_key" not in st.session_state:
+    if st.session_state.get("nav_key") not in NAV_KEYS:
         st.session_state["nav_key"] = NAV_KEYS[0]
-    if "main_nav" not in st.session_state:
-        st.session_state["main_nav"] = nav_label(NAV_KEYS[0])
-    if "period_key" not in st.session_state:
+    if st.session_state.get("period_key") not in PERIOD_KEYS:
         st.session_state["period_key"] = "3mo"
-    if "chart_key" not in st.session_state:
+    if st.session_state.get("chart_key") not in CHART_KEYS:
         st.session_state["chart_key"] = CHART_KEYS[0]
+    if st.session_state.get("top_sort_by") not in TOP_SORT_KEYS:
+        st.session_state["top_sort_by"] = TOP_SORT_KEYS[0]
+    init_language()
+    symbol = normalize_symbol(st.session_state.get("symbol", ""))
+    nav_key = st.session_state["nav_key"]
+    expected_nav = stock_nav_label(nav_key, symbol)
+    if st.session_state.get("main_nav") != expected_nav:
+        # Reset stale labels from a previous language/symbol selection.
+        if st.session_state.get("main_nav") not in [stock_nav_label(k, symbol) for k in NAV_KEYS]:
+            st.session_state["main_nav"] = expected_nav
 
 
 def _sync_stock_view(symbol: str):
@@ -1409,7 +1423,7 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"**{t('top_stocks')}**")
     top_stocks_slot = st.sidebar.empty()
-    period_internal = PERIOD_TO_INTERNAL[st.session_state.get("period_key", "3mo")]
+    period_internal = resolve_period_internal(st.session_state.get("period_key", "3mo"))
 
     if st.session_state.pop("_goto_overview", False):
         st.session_state["nav_key"] = "overview"
@@ -1417,7 +1431,7 @@ def main():
 
     try:
         nav_key, period_key, chart_key = render_top_bar(symbol)
-        period_internal = PERIOD_TO_INTERNAL[period_key]
+        period_internal = resolve_period_internal(period_key)
 
         if nav_key == "macro":
             try:

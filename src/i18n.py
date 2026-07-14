@@ -851,6 +851,10 @@ def translate_rating_label(label: str) -> str:
     return t(mapping[label]) if label in mapping else label
 
 
+def resolve_period_internal(period_key: str) -> str:
+    return PERIOD_TO_INTERNAL.get(period_key, PERIOD_TO_INTERNAL["3mo"])
+
+
 def init_language():
     if st.session_state.get("lang") not in SUPPORTED_LANGS:
         st.session_state["lang"] = "en"

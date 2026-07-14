@@ -74,7 +74,7 @@ def _normalize_major_holders(df: pd.DataFrame) -> dict[str, float | int | None]:
     return result
 
 
-def _prepare_holders_table(df: pd.DataFrame, holder_col: str | None = None) -> pd.DataFrame:
+def _prepare_holders_table(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
@@ -83,20 +83,20 @@ def _prepare_holders_table(df: pd.DataFrame, holder_col: str | None = None) -> p
     for col in out.columns:
         lower = str(col).lower()
         if lower in {"holder", "name"}:
-            rename_map[col] = "机构/基金"
+            rename_map[col] = "holder"
         elif "pctheld" in lower or "% out" in lower or "percent" in lower:
-            rename_map[col] = "持股比例%"
+            rename_map[col] = "pct_held"
         elif lower == "shares":
-            rename_map[col] = "持股数"
+            rename_map[col] = "shares"
         elif "value" in lower:
-            rename_map[col] = "市值"
+            rename_map[col] = "market_value"
         elif "date" in lower:
-            rename_map[col] = "报告日期"
+            rename_map[col] = "date_reported"
         elif "change" in lower:
-            rename_map[col] = "变动%"
+            rename_map[col] = "change_pct"
 
     out = out.rename(columns=rename_map)
-    if "持股比例%" in out.columns:
+    if "pct_held" in out.columns:
         def _format_pct(x):
             if pd.isna(x):
                 return None
@@ -109,7 +109,7 @@ def _prepare_holders_table(df: pd.DataFrame, holder_col: str | None = None) -> p
             except (TypeError, ValueError):
                 return x
 
-        out["持股比例%"] = out["持股比例%"].apply(_format_pct)
+        out["pct_held"] = out["pct_held"].apply(_format_pct)
     return out
 
 
@@ -122,25 +122,25 @@ def _prepare_insider_table(df: pd.DataFrame) -> pd.DataFrame:
     for col in out.columns:
         lower = str(col).lower()
         if lower == "insider":
-            rename_map[col] = "内部人"
+            rename_map[col] = "insider"
         elif lower == "position":
-            rename_map[col] = "职位"
+            rename_map[col] = "position"
         elif lower == "shares":
-            rename_map[col] = "持股数"
+            rename_map[col] = "shares"
         elif "latest trans date" in lower or "transaction date" in lower:
-            rename_map[col] = "最近交易日期"
+            rename_map[col] = "transaction_date"
         elif lower == "owner":
-            rename_map[col] = "交易方"
+            rename_map[col] = "owner"
         elif lower == "relationship":
-            rename_map[col] = "关系"
+            rename_map[col] = "relationship"
         elif lower == "type":
-            rename_map[col] = "买卖方向"
+            rename_map[col] = "transaction_type"
         elif lower == "text":
-            rename_map[col] = "交易说明"
+            rename_map[col] = "transaction_text"
         elif "filing date" in lower:
-            rename_map[col] = "申报日期"
+            rename_map[col] = "filing_date"
         elif lower == "value":
-            rename_map[col] = "交易金额"
+            rename_map[col] = "transaction_value"
 
     return out.rename(columns=rename_map)
 
@@ -181,20 +181,21 @@ def _detect_large_volume_days(
     if avg_volume <= 0:
         return pd.DataFrame()
 
-    work["均量倍数"] = work["Volume"] / avg_volume
-    work["成交量"] = work["Volume"]
-    large = work[work["均量倍数"] >= threshold].sort_values("Date", ascending=False).head(limit)
+    work["avg_volume_multiple"] = work["Volume"] / avg_volume
+    work["volume"] = work["Volume"]
+    large = work[work["avg_volume_multiple"] >= threshold].sort_values("Date", ascending=False).head(limit)
 
-    cols = ["Date", "Close", "成交量", "均量倍数"]
+    cols = ["Date", "Close", "volume", "avg_volume_multiple"]
     if "High" in large.columns and "Low" in large.columns:
         large = large.copy()
-        large["振幅%"] = ((large["High"] - large["Low"]) / large["Low"] * 100).round(2)
-        cols.append("振幅%")
+        large["swing_pct"] = ((large["High"] - large["Low"]) / large["Low"] * 100).round(2)
+        cols.append("swing_pct")
 
     display = large[cols].copy()
-    display["Date"] = pd.to_datetime(display["Date"]).dt.strftime("%Y-%m-%d")
-    display["成交量"] = display["成交量"].astype("int64")
-    display["均量倍数"] = display["均量倍数"].round(2)
+    display = display.rename(columns={"Date": "date", "Close": "close"})
+    display["date"] = pd.to_datetime(display["date"]).dt.strftime("%Y-%m-%d")
+    display["volume"] = display["volume"].astype("int64")
+    display["avg_volume_multiple"] = display["avg_volume_multiple"].round(2)
     return display
 
 
@@ -242,22 +243,22 @@ def fetch_ownership_analysis(symbol: str, period_label: str = "3个月") -> dict
     insider_tx_table = _prepare_insider_table(insider_tx_in_period)
 
     if not insider_tx_table.empty:
-        date_col = next((c for c in insider_tx_table.columns if "日期" in c), None)
+        date_col = next((c for c in insider_tx_table.columns if "date" in c.lower()), None)
         if date_col:
             insider_tx_table = insider_tx_table.sort_values(date_col, ascending=False)
 
     large_volume_days = _detect_large_volume_days(history)
 
-    period_label_text = period_label
+    period_range_text = period_label
     if period_start is not None and period_end is not None:
-        period_label_text = (
-            f"{period_start.strftime('%Y-%m-%d')} ~ {period_end.strftime('%Y-%m-%d')}（{period_label}）"
+        period_range_text = (
+            f"{period_start.strftime('%Y-%m-%d')} ~ {period_end.strftime('%Y-%m-%d')} ({period_label})"
         )
 
     return {
         "symbol": symbol,
         "period_label": period_label,
-        "period_range_text": period_label_text,
+        "period_range_text": period_range_text,
         "period_start": period_start,
         "period_end": period_end,
         "breakdown": breakdown,

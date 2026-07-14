@@ -10,38 +10,38 @@ import pandas as pd
 from src.stock_data import fetch_history, get_period_bounds, get_ticker, normalize_symbol
 from src.stock_news import prepare_news_items
 
-RECOMMENDATION_LABELS = {
-    "strong_buy": "强力买入",
-    "buy": "买入",
-    "hold": "持有",
-    "sell": "卖出",
-    "strong_sell": "强力卖出",
-    "underperform": "跑输大盘",
-    "outperform": "跑赢大盘",
-    "positive": "看好",
-    "negative": "看空",
-    "neutral": "中性",
-    "market perform": "符合大盘",
-    "equal-weight": "中性",
-    "overweight": "增持",
-    "underweight": "减持",
+GRADE_TO_CANONICAL = {
+    "Strong Buy": "strong_buy",
+    "Buy": "buy",
+    "Hold": "hold",
+    "Sell": "sell",
+    "Strong Sell": "strong_sell",
+    "Outperform": "outperform",
+    "Underperform": "underperform",
+    "Overweight": "overweight",
+    "Underweight": "underweight",
+    "Equal-Weight": "hold",
+    "Neutral": "hold",
+    "Positive": "buy",
+    "Negative": "sell",
+    "Market Perform": "hold",
 }
 
-GRADE_CN = {
-    "Strong Buy": "强力买入",
-    "Buy": "买入",
-    "Hold": "持有",
-    "Sell": "卖出",
-    "Strong Sell": "强力卖出",
-    "Outperform": "跑赢大盘",
-    "Underperform": "跑输大盘",
-    "Overweight": "增持",
-    "Underweight": "减持",
-    "Equal-Weight": "中性",
-    "Neutral": "中性",
-    "Positive": "看好",
-    "Negative": "看空",
-    "Market Perform": "符合大盘",
+RECOMMENDATION_TO_CANONICAL = {
+    "strong_buy": "strong_buy",
+    "buy": "buy",
+    "hold": "hold",
+    "sell": "sell",
+    "strong_sell": "strong_sell",
+    "underperform": "underperform",
+    "outperform": "outperform",
+    "positive": "buy",
+    "negative": "sell",
+    "neutral": "hold",
+    "market_perform": "hold",
+    "equal_weight": "hold",
+    "overweight": "overweight",
+    "underweight": "underweight",
 }
 
 
@@ -68,17 +68,18 @@ def _extract_value(value) -> float | None:
         return None
 
 
-def _translate_grade(grade: str) -> str:
+def _normalize_grade(grade: str) -> str:
     if not grade or pd.isna(grade):
         return "—"
     text = str(grade).strip()
-    return GRADE_CN.get(text, text)
+    return GRADE_TO_CANONICAL.get(text, text)
 
 
-def _translate_recommendation(key: str | None) -> str:
+def _normalize_recommendation(key: str | None) -> str:
     if not key:
-        return "—"
-    return RECOMMENDATION_LABELS.get(str(key).lower().replace(" ", "_"), str(key))
+        return ""
+    norm = str(key).lower().replace(" ", "_").replace("-", "_")
+    return RECOMMENDATION_TO_CANONICAL.get(norm, norm)
 
 
 def _filter_index_by_period(df: pd.DataFrame, start: pd.Timestamp | None, end: pd.Timestamp | None) -> pd.DataFrame:
@@ -98,23 +99,23 @@ def _prepare_upgrades_table(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    out = df.reset_index().rename(columns={"GradeDate": "评级日期", "index": "评级日期"})
+    out = df.reset_index().rename(columns={"GradeDate": "grade_date", "index": "grade_date"})
     rename_map = {
-        "Firm": "机构",
-        "ToGrade": "最新评级",
-        "FromGrade": "此前评级",
-        "Action": "动作",
-        "priceTarget": "目标价",
-        "currentPriceTarget": "当前目标价",
-        "priorPriceTarget": "此前目标价",
+        "Firm": "firm",
+        "ToGrade": "to_grade",
+        "FromGrade": "from_grade",
+        "Action": "action",
+        "priceTarget": "price_target",
+        "currentPriceTarget": "current_price_target",
+        "priorPriceTarget": "prior_price_target",
     }
     out = out.rename(columns=rename_map)
-    for col in ("最新评级", "此前评级"):
+    for col in ("to_grade", "from_grade"):
         if col in out.columns:
-            out[col] = out[col].apply(_translate_grade)
-    if "评级日期" in out.columns:
-        out["评级日期"] = pd.to_datetime(out["评级日期"], errors="coerce").dt.strftime("%Y-%m-%d")
-    for col in ("目标价", "当前目标价", "此前目标价"):
+            out[col] = out[col].apply(_normalize_grade)
+    if "grade_date" in out.columns:
+        out["grade_date"] = pd.to_datetime(out["grade_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    for col in ("price_target", "current_price_target", "prior_price_target"):
         if col in out.columns:
             out[col] = out[col].apply(_extract_value)
     return out
@@ -126,11 +127,11 @@ def _prepare_recommendation_trend(df: pd.DataFrame) -> pd.DataFrame:
 
     out = df.copy()
     mapping = {
-        "strongBuy": "强力买入",
-        "buy": "买入",
-        "hold": "持有",
-        "sell": "卖出",
-        "strongSell": "强力卖出",
+        "strongBuy": "strong_buy",
+        "buy": "buy",
+        "hold": "hold",
+        "sell": "sell",
+        "strongSell": "strong_sell",
     }
     cols = [c for c in mapping if c in out.columns]
     if not cols:
@@ -138,7 +139,7 @@ def _prepare_recommendation_trend(df: pd.DataFrame) -> pd.DataFrame:
 
     result = out[cols].rename(columns=mapping)
     if "period" in out.columns:
-        result.insert(0, "周期", out["period"].values)
+        result.insert(0, "period", out["period"].values)
     return result
 
 
@@ -146,21 +147,21 @@ def _prepare_growth_estimates(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     rename = {
-        "stockTrend": "个股增长预期%",
-        "industryTrend": "行业增长预期%",
-        "sectorTrend": "板块增长预期%",
-        "indexTrend": "指数增长预期%",
+        "stockTrend": "stock_growth_pct",
+        "industryTrend": "industry_growth_pct",
+        "sectorTrend": "sector_growth_pct",
+        "indexTrend": "index_growth_pct",
     }
     out = df.rename(columns=rename)
-    out.index.name = "周期"
+    out.index.name = "period"
     return out.reset_index()
 
 
-def _prepare_eps_table(df: pd.DataFrame, label: str) -> pd.DataFrame:
+def _prepare_eps_table(df: pd.DataFrame, category: str) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
-    out = df.reset_index().rename(columns={"period": "周期", "index": "周期"})
-    out.insert(0, "类型", label)
+    out = df.reset_index().rename(columns={"period": "period", "index": "period"})
+    out.insert(0, "category", category)
     return out
 
 
@@ -168,7 +169,7 @@ def _prepare_news(news_items: list[dict], start: pd.Timestamp | None, end: pd.Ti
     df = prepare_news_items(news_items, start, end)
     if df.empty:
         return df
-    return df.drop(columns=["摘要"], errors="ignore")
+    return df.drop(columns=["summary"], errors="ignore")
 
 
 def fetch_trend_analysis(symbol: str, period_label: str = "3个月", current_price: float | None = None) -> dict[str, Any]:
@@ -201,8 +202,8 @@ def fetch_trend_analysis(symbol: str, period_label: str = "3个月", current_pri
     upgrades_table = _prepare_upgrades_table(upgrades_in_period)
 
     growth = _prepare_growth_estimates(_safe_df(getattr(ticker, "growth_estimates", None)))
-    eps_trend = _prepare_eps_table(_safe_df(getattr(ticker, "eps_trend", None)), "EPS趋势")
-    eps_revisions = _prepare_eps_table(_safe_df(getattr(ticker, "eps_revisions", None)), "EPS修正")
+    eps_trend = _prepare_eps_table(_safe_df(getattr(ticker, "eps_trend", None)), "eps_trend")
+    eps_revisions = _prepare_eps_table(_safe_df(getattr(ticker, "eps_revisions", None)), "eps_revisions")
 
     try:
         news_items = ticker.get_news(count=30) or []
@@ -214,13 +215,13 @@ def fetch_trend_analysis(symbol: str, period_label: str = "3个月", current_pri
     if not recommendation_trend.empty:
         latest = recommendation_trend.iloc[-1]
         for col in latest.index:
-            if col != "周期" and pd.notna(latest[col]):
+            if col != "period" and pd.notna(latest[col]):
                 latest_distribution[col] = int(latest[col])
 
     period_range_text = period_label
     if period_start is not None and period_end is not None:
         period_range_text = (
-            f"{period_start.strftime('%Y-%m-%d')} ~ {period_end.strftime('%Y-%m-%d')}（{period_label}）"
+            f"{period_start.strftime('%Y-%m-%d')} ~ {period_end.strftime('%Y-%m-%d')} ({period_label})"
         )
 
     return {
@@ -229,7 +230,7 @@ def fetch_trend_analysis(symbol: str, period_label: str = "3个月", current_pri
         "period_range_text": period_range_text,
         "period_start": period_start,
         "period_end": period_end,
-        "consensus_rating": _translate_recommendation(info.get("recommendationKey")),
+        "consensus_rating": _normalize_recommendation(info.get("recommendationKey")),
         "consensus_score": info.get("recommendationMean"),
         "analyst_count": info.get("numberOfAnalystOpinions"),
         "average_rating_text": info.get("averageAnalystRating"),

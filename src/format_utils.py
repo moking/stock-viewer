@@ -26,15 +26,35 @@ def fmt_pct(value, decimals: int = 2) -> str:
 
 
 def _column_format(col: str) -> str | None:
-    if col in {"成交量", "持股数", "Volume", "Shares", "区间交易日"}:
+    low = col.lower()
+    if any(key in low for key in ("volume", "shares", "成交量", "持股", "股数", "股數")):
         return "{:,.0f}"
-    if any(key in col for key in ("成交量", "持股数", "股数")):
-        return "{:,.0f}"
-    if any(key in col for key in ("价", "额", "值", "盈亏", "Close", "Open", "High", "Low")):
+    if "%" in col or "比例" in col or "倍" in col or "pct" in low or "holding" in low:
         return "{:,.2f}"
-    if "%" in col or "倍" in col or "比例" in col:
+    if any(
+        key in low
+        for key in (
+            "price",
+            "close",
+            "value",
+            "pnl",
+            "盈亏",
+            "盈虧",
+            "价",
+            "價",
+            "额",
+            "額",
+        )
+    ):
         return "{:,.2f}"
     return None
+
+
+def display_dataframe(df: pd.DataFrame):
+    from src.i18n import prepare_display_dataframe
+
+    display_df = prepare_display_dataframe(df)
+    return style_numeric_dataframe(display_df)
 
 
 def style_numeric_dataframe(df: pd.DataFrame):

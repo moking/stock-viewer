@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 SUPPORTED_LANGS = ("en", "zh-CN", "zh-TW")
@@ -25,6 +26,86 @@ PERIOD_TO_INTERNAL = {
     "5y": "5年",
 }
 INTERNAL_TO_PERIOD = {v: k for k, v in PERIOD_TO_INTERNAL.items()}
+
+DATAFRAME_COLUMN_KEYS = {
+    "period": "col_period",
+    "firm": "col_firm",
+    "grade_date": "col_grade_date",
+    "to_grade": "col_to_grade",
+    "from_grade": "col_from_grade",
+    "action": "col_action",
+    "price_target": "col_price_target",
+    "current_price_target": "col_current_price_target",
+    "prior_price_target": "col_prior_price_target",
+    "category": "col_category",
+    "stock_growth_pct": "col_stock_growth_pct",
+    "industry_growth_pct": "col_industry_growth_pct",
+    "sector_growth_pct": "col_sector_growth_pct",
+    "index_growth_pct": "col_index_growth_pct",
+    "holder": "col_holder",
+    "pct_held": "col_pct_held",
+    "shares": "col_shares",
+    "market_value": "col_market_value",
+    "date_reported": "col_date_reported",
+    "change_pct": "col_change_pct",
+    "insider": "col_insider",
+    "position": "col_position",
+    "transaction_date": "col_transaction_date",
+    "owner": "col_owner",
+    "relationship": "col_relationship",
+    "transaction_type": "col_transaction_type",
+    "transaction_text": "col_transaction_text",
+    "filing_date": "col_filing_date",
+    "transaction_value": "col_transaction_value",
+    "volume": "col_volume",
+    "avg_volume_multiple": "col_avg_volume_multiple",
+    "swing_pct": "col_swing_pct",
+    "close": "col_close",
+    "date": "col_date",
+    "source": "col_news_source",
+    "title": "col_news_title",
+    "summary": "col_news_summary",
+    "link": "col_news_link",
+    "strong_buy": "rating_strong_buy",
+    "buy": "rating_buy",
+    "hold": "rating_hold",
+    "sell": "rating_sell",
+    "strong_sell": "rating_strong_sell",
+}
+
+RATING_VALUE_COLUMNS = frozenset({"to_grade", "from_grade"})
+
+RATING_COLUMN_NAME_KEYS = frozenset(
+    {
+        "strong_buy",
+        "buy",
+        "hold",
+        "sell",
+        "strong_sell",
+    }
+)
+
+RATING_LABEL_I18N = {
+    "strong_buy": "rating_strong_buy",
+    "buy": "rating_buy",
+    "hold": "rating_hold",
+    "sell": "rating_sell",
+    "strong_sell": "rating_strong_sell",
+    "outperform": "rating_outperform",
+    "underperform": "rating_underperform",
+    "overweight": "rating_overweight",
+    "underweight": "rating_underweight",
+    "强力买入": "rating_strong_buy",
+    "买入": "rating_buy",
+    "持有": "rating_hold",
+    "卖出": "rating_sell",
+    "强力卖出": "rating_strong_sell",
+    "Strong Buy": "rating_strong_buy",
+    "Buy": "rating_buy",
+    "Hold": "rating_hold",
+    "Sell": "rating_sell",
+    "Strong Sell": "rating_strong_sell",
+}
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
@@ -254,6 +335,42 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_pnl": "P&L",
         "col_pnl_pct": "P&L %",
         "col_note": "Note",
+        "col_period": "Period",
+        "col_firm": "Firm",
+        "col_grade_date": "Rating date",
+        "col_to_grade": "New rating",
+        "col_from_grade": "Previous rating",
+        "col_action": "Action",
+        "col_price_target": "Price target",
+        "col_current_price_target": "Current target",
+        "col_prior_price_target": "Prior target",
+        "col_category": "Type",
+        "col_stock_growth_pct": "Stock growth est. %",
+        "col_industry_growth_pct": "Industry growth est. %",
+        "col_sector_growth_pct": "Sector growth est. %",
+        "col_index_growth_pct": "Index growth est. %",
+        "col_holder": "Institution / fund",
+        "col_pct_held": "Holding %",
+        "col_date_reported": "Report date",
+        "col_change_pct": "Change %",
+        "col_insider": "Insider",
+        "col_position": "Position",
+        "col_transaction_date": "Transaction date",
+        "col_owner": "Owner",
+        "col_relationship": "Relationship",
+        "col_transaction_type": "Side",
+        "col_transaction_text": "Transaction",
+        "col_filing_date": "Filing date",
+        "col_transaction_value": "Transaction value",
+        "col_avg_volume_multiple": "Avg volume multiple",
+        "col_swing_pct": "Range %",
+        "col_close": "Close",
+        "col_date": "Date",
+        "col_volume": "Volume",
+        "col_news_source": "Source",
+        "col_news_title": "Title",
+        "col_news_summary": "Summary",
+        "col_news_link": "Link",
         "delete_position": "Delete position",
         "select_delete": "Select position to delete",
         "delete": "Delete",
@@ -273,6 +390,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "rating_hold": "Hold",
         "rating_sell": "Sell",
         "rating_strong_sell": "Strong sell",
+        "rating_outperform": "Outperform",
+        "rating_underperform": "Underperform",
+        "rating_overweight": "Overweight",
+        "rating_underweight": "Underweight",
         "footer_source_title": "Data source",
         "footer_source_body": "Quotes, history, volume, analyst ratings, ownership, and news are from <a href=\"https://finance.yahoo.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Yahoo Finance</a> (via yfinance). Data may be delayed or incomplete and is for reference only.",
         "footer_legal_title": "Legal & risk disclaimer",
@@ -510,6 +631,42 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_pnl": "盈亏",
         "col_pnl_pct": "盈亏%",
         "col_note": "备注",
+        "col_period": "周期",
+        "col_firm": "机构",
+        "col_grade_date": "评级日期",
+        "col_to_grade": "最新评级",
+        "col_from_grade": "此前评级",
+        "col_action": "动作",
+        "col_price_target": "目标价",
+        "col_current_price_target": "当前目标价",
+        "col_prior_price_target": "此前目标价",
+        "col_category": "类型",
+        "col_stock_growth_pct": "个股增长预期%",
+        "col_industry_growth_pct": "行业增长预期%",
+        "col_sector_growth_pct": "板块增长预期%",
+        "col_index_growth_pct": "指数增长预期%",
+        "col_holder": "机构/基金",
+        "col_pct_held": "持股比例%",
+        "col_date_reported": "报告日期",
+        "col_change_pct": "变动%",
+        "col_insider": "内部人",
+        "col_position": "职位",
+        "col_transaction_date": "交易日期",
+        "col_owner": "交易方",
+        "col_relationship": "关系",
+        "col_transaction_type": "买卖方向",
+        "col_transaction_text": "交易说明",
+        "col_filing_date": "申报日期",
+        "col_transaction_value": "交易金额",
+        "col_avg_volume_multiple": "均量倍数",
+        "col_swing_pct": "振幅%",
+        "col_close": "收盘价",
+        "col_date": "日期",
+        "col_volume": "成交量",
+        "col_news_source": "来源",
+        "col_news_title": "标题",
+        "col_news_summary": "摘要",
+        "col_news_link": "链接",
         "delete_position": "删除持仓",
         "select_delete": "选择要删除的持仓",
         "delete": "删除",
@@ -529,6 +686,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "rating_hold": "持有",
         "rating_sell": "卖出",
         "rating_strong_sell": "强力卖出",
+        "rating_outperform": "跑赢大盘",
+        "rating_underperform": "跑输大盘",
+        "rating_overweight": "增持",
+        "rating_underweight": "减持",
         "footer_source_title": "数据来源",
         "footer_source_body": "行情、历史价格、成交量、分析师评级与目标价、机构持仓及新闻资讯均来自 <a href=\"https://finance.yahoo.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Yahoo Finance</a>（通过 yfinance 获取）。数据可能存在延迟、缺失或误差，仅供参考。",
         "footer_legal_title": "法律条款与风险提示",
@@ -766,6 +927,42 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_pnl": "盈虧",
         "col_pnl_pct": "盈虧%",
         "col_note": "備註",
+        "col_period": "週期",
+        "col_firm": "機構",
+        "col_grade_date": "評級日期",
+        "col_to_grade": "最新評級",
+        "col_from_grade": "此前評級",
+        "col_action": "動作",
+        "col_price_target": "目標價",
+        "col_current_price_target": "當前目標價",
+        "col_prior_price_target": "此前目標價",
+        "col_category": "類型",
+        "col_stock_growth_pct": "個股增長預期%",
+        "col_industry_growth_pct": "行業增長預期%",
+        "col_sector_growth_pct": "板塊增長預期%",
+        "col_index_growth_pct": "指數增長預期%",
+        "col_holder": "機構/基金",
+        "col_pct_held": "持股比例%",
+        "col_date_reported": "報告日期",
+        "col_change_pct": "變動%",
+        "col_insider": "內部人",
+        "col_position": "職位",
+        "col_transaction_date": "交易日期",
+        "col_owner": "交易方",
+        "col_relationship": "關係",
+        "col_transaction_type": "買賣方向",
+        "col_transaction_text": "交易說明",
+        "col_filing_date": "申報日期",
+        "col_transaction_value": "交易金額",
+        "col_avg_volume_multiple": "均量倍數",
+        "col_swing_pct": "振幅%",
+        "col_close": "收盤價",
+        "col_date": "日期",
+        "col_volume": "成交量",
+        "col_news_source": "來源",
+        "col_news_title": "標題",
+        "col_news_summary": "摘要",
+        "col_news_link": "連結",
         "delete_position": "刪除持倉",
         "select_delete": "選擇要刪除的持倉",
         "delete": "刪除",
@@ -785,6 +982,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "rating_hold": "持有",
         "rating_sell": "賣出",
         "rating_strong_sell": "強力賣出",
+        "rating_outperform": "跑贏大盤",
+        "rating_underperform": "跑輸大盤",
+        "rating_overweight": "增持",
+        "rating_underweight": "減持",
         "footer_source_title": "資料來源",
         "footer_source_body": "行情、歷史價格、成交量、分析師評級與目標價、機構持倉及新聞資訊均來自 <a href=\"https://finance.yahoo.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Yahoo Finance</a>（透過 yfinance 取得）。資料可能存在延遲、缺失或誤差，僅供參考。",
         "footer_legal_title": "法律條款與風險提示",
@@ -841,14 +1042,47 @@ def top_sort_label(sort_key: str) -> str:
 
 
 def translate_rating_label(label: str) -> str:
-    mapping = {
-        "强力买入": "rating_strong_buy",
-        "买入": "rating_buy",
-        "持有": "rating_hold",
-        "卖出": "rating_sell",
-        "强力卖出": "rating_strong_sell",
+    if label is None or (isinstance(label, float) and pd.isna(label)):
+        return "—"
+    text = str(label).strip()
+    if not text or text == "—":
+        return "—"
+    key = RATING_LABEL_I18N.get(text)
+    if key:
+        return t(key)
+    return text
+
+
+def localize_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    rename = {col: t(DATAFRAME_COLUMN_KEYS[col]) for col in df.columns if col in DATAFRAME_COLUMN_KEYS}
+    return df.rename(columns=rename)
+
+
+def localize_dataframe_values(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    work = df.copy()
+    if "category" in work.columns:
+        work["category"] = work["category"].map(
+            lambda value: t(value) if value in {"eps_trend", "eps_revisions"} else value
+        )
+    for col in RATING_VALUE_COLUMNS:
+        if col in work.columns:
+            work[col] = work[col].map(translate_rating_label)
+    rating_col_renames = {
+        col: translate_rating_label(col) for col in work.columns if col in RATING_COLUMN_NAME_KEYS
     }
-    return t(mapping[label]) if label in mapping else label
+    if rating_col_renames:
+        work = work.rename(columns=rating_col_renames)
+    return work
+
+
+def prepare_display_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    return localize_dataframe_columns(localize_dataframe_values(df.copy()))
 
 
 def resolve_period_internal(period_key: str) -> str:

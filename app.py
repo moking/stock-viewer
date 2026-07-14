@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.trend_analysis import fetch_trend_analysis  # noqa: E402
-from src.format_utils import fmt_num, fmt_pct, style_numeric_dataframe  # noqa: E402
+from src.format_utils import display_dataframe, fmt_num, fmt_pct, style_numeric_dataframe  # noqa: E402
 from src.holdings_analysis import fetch_ownership_analysis  # noqa: E402
 from src.favorites import (  # noqa: E402
     is_favorite,
@@ -42,6 +42,7 @@ from src.i18n import (  # noqa: E402
     NAV_KEYS,
     PERIOD_KEYS,
     PERIOD_TO_INTERNAL,
+    DATAFRAME_COLUMN_KEYS,
     resolve_period_internal,
     chart_label,
     get_lang,
@@ -497,11 +498,11 @@ def render_news_list(news_df: pd.DataFrame, *, empty_message: str):
 
     with st.container(height=320, border=False):
         for _, row in news_df.iterrows():
-            title = row.get("标题", "—")
-            source = row.get("来源", "—")
-            date = row.get("日期", "—")
-            summary = row.get("摘要", "")
-            link = row.get("链接")
+            title = row.get("title", "—")
+            source = row.get("source", "—")
+            date = row.get("date", "—")
+            summary = row.get("summary", "")
+            link = row.get("link")
             if link:
                 st.markdown(f"**{date}** · {source}  \n[{title}]({link})")
             else:
@@ -677,53 +678,54 @@ def render_ownership_analysis_tab(symbol: str, period_key: str, history: pd.Data
     if analysis["institutional_holders"].empty:
         st.info(t("no_inst_reports"))
     else:
-        st.dataframe(style_numeric_dataframe(analysis["institutional_holders"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["institutional_holders"]), use_container_width=True, hide_index=True)
 
     st.markdown(f"#### {t('fund_reports_range')}")
     if analysis["mutualfund_holders"].empty:
         st.info(t("no_fund_reports"))
     else:
-        st.dataframe(style_numeric_dataframe(analysis["mutualfund_holders"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["mutualfund_holders"]), use_container_width=True, hide_index=True)
 
     st.markdown(f"#### {t('insider_holdings')}")
     st.caption(t("insider_holdings_note"))
     if analysis["insider_roster"].empty:
         st.info(t("no_insider_holdings"))
     else:
-        st.dataframe(style_numeric_dataframe(analysis["insider_roster"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["insider_roster"]), use_container_width=True, hide_index=True)
 
     st.markdown(f"#### {t('insider_trades_range')}")
     if analysis["insider_transactions"].empty:
         st.info(t("no_insider_trades"))
     else:
-        st.dataframe(style_numeric_dataframe(analysis["insider_transactions"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["insider_transactions"]), use_container_width=True, hide_index=True)
 
     st.markdown(f"#### {t('volume_spike_range')}")
     st.caption(t("volume_spike_note"))
     if analysis["large_volume_days"].empty:
         st.info(t("no_volume_spike"))
     else:
-        st.dataframe(style_numeric_dataframe(analysis["large_volume_days"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["large_volume_days"]), use_container_width=True, hide_index=True)
 
 
 def build_recommendation_bar(distribution: dict) -> go.Figure | None:
     if not distribution:
         return None
+    rating_colors = {
+        "strong_buy": "#16a34a",
+        "buy": "#22c55e",
+        "hold": "#f59e0b",
+        "sell": "#ef4444",
+        "strong_sell": "#b91c1c",
+    }
     labels = [translate_rating_label(k) for k in distribution.keys()]
     values = list(distribution.values())
-    colors = {
-        translate_rating_label("强力买入"): "#16a34a",
-        translate_rating_label("买入"): "#22c55e",
-        translate_rating_label("持有"): "#f59e0b",
-        translate_rating_label("卖出"): "#ef4444",
-        translate_rating_label("强力卖出"): "#b91c1c",
-    }
+    colors = [rating_colors.get(k, "#60a5fa") for k in distribution.keys()]
     fig = go.Figure(
         data=[
             go.Bar(
                 x=labels,
                 y=values,
-                marker_color=[colors.get(label, "#60a5fa") for label in labels],
+                marker_color=[colors[i] for i in range(len(labels))],
             )
         ]
     )
@@ -775,16 +777,17 @@ def build_growth_chart(growth_df: pd.DataFrame) -> go.Figure | None:
         return None
     fig = go.Figure()
     color_map = {
-        "个股增长预期%": "#22c55e",
-        "行业增长预期%": "#60a5fa",
-        "板块增长预期%": "#f59e0b",
-        "指数增长预期%": "#a78bfa",
+        "stock_growth_pct": "#22c55e",
+        "industry_growth_pct": "#60a5fa",
+        "sector_growth_pct": "#f59e0b",
+        "index_growth_pct": "#a78bfa",
     }
     for col in growth_df.columns:
-        if col == "周期":
+        if col == "period":
             continue
+        label = t(DATAFRAME_COLUMN_KEYS[col]) if col in DATAFRAME_COLUMN_KEYS else col
         fig.add_trace(
-            go.Bar(name=col, x=growth_df["周期"], y=growth_df[col], marker_color=color_map.get(col, "#94a3b8"))
+            go.Bar(name=label, x=growth_df["period"], y=growth_df[col], marker_color=color_map.get(col, "#94a3b8"))
         )
     fig.update_layout(
         barmode="group",
@@ -812,7 +815,11 @@ def render_trend_analysis_tab(symbol: str, period_key: str, history: pd.DataFram
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        render_metric_card(t("consensus_rating"), analysis.get("consensus_rating", "—"))
+        consensus = analysis.get("consensus_rating", "")
+        render_metric_card(
+            t("consensus_rating"),
+            translate_rating_label(consensus) if consensus else "—",
+        )
     with c2:
         score = analysis.get("consensus_score")
         render_metric_card(t("rating_score"), fmt_num(score) if score is not None else "—")
@@ -863,7 +870,7 @@ def render_trend_analysis_tab(symbol: str, period_key: str, history: pd.DataFram
     if analysis["upgrades_downgrades"].empty:
         st.info(t("no_rating_changes"))
     else:
-        st.dataframe(style_numeric_dataframe(analysis["upgrades_downgrades"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["upgrades_downgrades"]), use_container_width=True, hide_index=True)
 
     st.markdown(f"#### {t('growth_forecast')}")
     growth_chart = build_growth_chart(analysis["growth_estimates"])
@@ -872,7 +879,7 @@ def render_trend_analysis_tab(symbol: str, period_key: str, history: pd.DataFram
     if analysis["growth_estimates"].empty:
         st.info(t("no_growth_forecast"))
     else:
-        st.dataframe(style_numeric_dataframe(analysis["growth_estimates"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["growth_estimates"]), use_container_width=True, hide_index=True)
 
     eps_col1, eps_col2 = st.columns(2)
     with eps_col1:
@@ -880,17 +887,17 @@ def render_trend_analysis_tab(symbol: str, period_key: str, history: pd.DataFram
         if analysis["eps_trend"].empty:
             st.info(t("no_eps_trend"))
         else:
-            st.dataframe(style_numeric_dataframe(analysis["eps_trend"]), use_container_width=True, hide_index=True)
+            st.dataframe(display_dataframe(analysis["eps_trend"]), use_container_width=True, hide_index=True)
     with eps_col2:
         st.markdown(f"##### {t('eps_revisions')}")
         if analysis["eps_revisions"].empty:
             st.info(t("no_eps_revisions"))
         else:
-            st.dataframe(style_numeric_dataframe(analysis["eps_revisions"]), use_container_width=True, hide_index=True)
+            st.dataframe(display_dataframe(analysis["eps_revisions"]), use_container_width=True, hide_index=True)
 
     if not analysis["recommendation_trend"].empty:
         st.markdown(f"#### {t('rating_trend_monthly')}")
-        st.dataframe(style_numeric_dataframe(analysis["recommendation_trend"]), use_container_width=True, hide_index=True)
+        st.dataframe(display_dataframe(analysis["recommendation_trend"]), use_container_width=True, hide_index=True)
 
     st.markdown(f"#### {t('news_views')}")
     render_news_list(analysis["news"], empty_message=t("no_news"))

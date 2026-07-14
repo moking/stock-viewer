@@ -99,11 +99,11 @@ def prepare_news_items(
                 continue
         rows.append(
             {
-                "日期": parsed["date"],
-                "来源": parsed["source"],
-                "标题": parsed["title"],
-                "摘要": parsed["summary"],
-                "链接": parsed["link"],
+                "date": parsed["date"],
+                "source": parsed["source"],
+                "title": parsed["title"],
+                "summary": parsed["summary"],
+                "link": parsed["link"],
                 "published_at": published,
             }
         )
